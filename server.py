@@ -9,11 +9,16 @@ from interactable import Interactable
 USER_DB_FILE = 'user_db.json'
 LOCK = threading.Lock()
 
+USERNAME = "username"
+IS_WAITING = "is_waiting"
+IS_PLAYING = "is_playing"
+
 class Server(Interactable):
     def __init__(self):
         self.lobby_tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.game_server_tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.active_connections = 0
-        self.client_socket_user_dict = {} # client_socket: username
+        self.client_socket_user_dict = {} # client_socket: {USERNAME: <username>, IS_WAITING: bool, IS_PLAYING: bool}
         self.waiting_client_sockets = []
         self.user_db = self.load_user_db()
         self.shutdown_event = threading.Event()
@@ -55,10 +60,10 @@ class Server(Interactable):
         with LOCK:
             if username not in self.user_db or self.user_db[username]["password"] != password:
                 self.send_message_format_args(client_socket, Protocols.Response.LOGIN_RESULT, -1)
-            elif username in list(self.client_socket_user_dict.values()):
+            elif username in [self.client_socket_user_dict[sock][USERNAME] for sock in self.client_socket_user_dict.keys()]:
                 self.send_message_format_args(client_socket, Protocols.Response.LOGIN_RESULT, -2)
             else:
-                self.client_socket_user_dict[client_socket] = username
+                self.client_socket_user_dict[client_socket][USERNAME] = username
                 self.send_message_format_args(client_socket, Protocols.Response.LOGIN_RESULT, 0)
 
     def help_logout(self, client_socket: socket.socket):
@@ -66,22 +71,22 @@ class Server(Interactable):
         self.send_message_format(client_socket, Protocols.Response.LOGOUT_SUCCESS)
 
     def record_play(self, client_socket: socket.socket):
-        self.user_db[self.client_socket_user_dict[client_socket]]["games_played"] += 1
+        self.user_db[self.client_socket_user_dict[client_socket][USERNAME]]["games_played"] += 1
         self.save_user_db()
         self.send_message_format(client_socket, Protocols.Response.PLAY_RECORD_DONE)
 
     def record_win(self, client_socket: socket.socket):
-        self.user_db[self.client_socket_user_dict[client_socket]]["games_won"] += 1
+        self.user_db[self.client_socket_user_dict[client_socket][USERNAME]]["games_won"] += 1
         self.save_user_db()
         self.send_message_format(client_socket, Protocols.Response.WIN_RECORD_DONE)
 
     def send_status(self, client_socket: socket.socket):
-        games_played = self.user_db[self.client_socket_user_dict[client_socket]]["games_played"]
-        games_won = self.user_db[self.client_socket_user_dict[client_socket]]["games_won"]
+        games_played = self.user_db[self.client_socket_user_dict[client_socket][USERNAME]]["games_played"]
+        games_won = self.user_db[self.client_socket_user_dict[client_socket][USERNAME]]["games_won"]
         self.send_message_format_args(client_socket, Protocols.Response.STATUS_RESULT, games_played, games_won)
 
     def handle_client(self, client_socket: socket.socket, addr: tuple):
-        self.client_socket_user_dict[client_socket] = None
+        self.client_socket_user_dict[client_socket] = {USERNAME: None, IS_WAITING: False, IS_PLAYING: False}
         self.active_connections += 1
         print(f"[NEW CONNECTION] {addr} connected.")
         self.send_message_format(client_socket, Protocols.Response.WELCOME)

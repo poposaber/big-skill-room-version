@@ -50,3 +50,6 @@ class Protocols:
         ROUND_FIRST = MessageFormat("ROUND_FIRST", [str]) # ROUND_FIRST|A or ROUND_FIRST|B
         REPORTCARD = MessageFormat("REPORTCARD", [int, int, int]) # REPORTCARD|4|2|-1 means opponent played 4 and 2
         FORFEIT = MessageFormat("FORFEIT")
+    class GameServerCommand:
+        ROLE = MessageFormat("ROLE", [str])
+        

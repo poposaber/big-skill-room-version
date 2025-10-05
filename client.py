@@ -6,6 +6,7 @@ from protocols import Protocols
 from game import Game
 from interactable import Interactable
 import os
+import queue
 
 LOCK = threading.Lock()
 MAX_CNP_COUNT = 100
@@ -30,6 +31,9 @@ class Client(Interactable):
         self.about_to_enter_game = False
 
         self.is_player_a = True  # True if player A, False if player B
+        self.send_queue = queue.Queue()
+        self.response_queue = queue.Queue()
+        self.event_queue = queue.Queue()
 
     def connect_to_lobby_server(self, host="127.0.0.1", port = 8888): 
         self.lobby_tcp_sock.connect((host, port))
@@ -590,3 +594,9 @@ class Client(Interactable):
 
     def receive_check_is_format_name_from_lobby_server(self, msg_format) -> bool:
         return self.receive_and_check_is_message_format_name(self.lobby_tcp_sock, msg_format)
+    
+    def connect_and_start_client_process(self, host="127.0.0.1", port = 8888):
+        self.connect_to_lobby_server(host, port)
+        self.interact_to_lobby_server()
+        
+
