@@ -2,26 +2,18 @@ import socket
 import threading
 import json
 import os
-import time
 from protocols import Protocols
 from interactable import Interactable
 
 USER_DB_FILE = 'user_db.json'
 LOCK = threading.Lock()
 
-USERNAME = "username"
-IS_WAITING = "is_waiting"
-IS_PLAYING = "is_playing"
-
 class Server(Interactable):
     def __init__(self):
         self.lobby_tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        self.game_server_tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.active_connections = 0
-        self.client_socket_user_dict = {} # client_socket: {USERNAME: <username>, IS_WAITING: bool, IS_PLAYING: bool}
-        self.waiting_client_sockets = []
+        self.client_socket_user_dict = {} # client_socket: username
         self.user_db = self.load_user_db()
-        self.shutdown_event = threading.Event()
 
     def load_user_db(self):
         if not os.path.exists(USER_DB_FILE):
@@ -60,10 +52,10 @@ class Server(Interactable):
         with LOCK:
             if username not in self.user_db or self.user_db[username]["password"] != password:
                 self.send_message_format_args(client_socket, Protocols.Response.LOGIN_RESULT, -1)
-            elif username in [self.client_socket_user_dict[sock][USERNAME] for sock in self.client_socket_user_dict.keys()]:
+            elif username in list(self.client_socket_user_dict.values()):
                 self.send_message_format_args(client_socket, Protocols.Response.LOGIN_RESULT, -2)
             else:
-                self.client_socket_user_dict[client_socket][USERNAME] = username
+                self.client_socket_user_dict[client_socket] = username
                 self.send_message_format_args(client_socket, Protocols.Response.LOGIN_RESULT, 0)
 
     def help_logout(self, client_socket: socket.socket):
@@ -71,22 +63,22 @@ class Server(Interactable):
         self.send_message_format(client_socket, Protocols.Response.LOGOUT_SUCCESS)
 
     def record_play(self, client_socket: socket.socket):
-        self.user_db[self.client_socket_user_dict[client_socket][USERNAME]]["games_played"] += 1
+        self.user_db[self.client_socket_user_dict[client_socket]]["games_played"] += 1
         self.save_user_db()
         self.send_message_format(client_socket, Protocols.Response.PLAY_RECORD_DONE)
 
     def record_win(self, client_socket: socket.socket):
-        self.user_db[self.client_socket_user_dict[client_socket][USERNAME]]["games_won"] += 1
+        self.user_db[self.client_socket_user_dict[client_socket]]["games_won"] += 1
         self.save_user_db()
         self.send_message_format(client_socket, Protocols.Response.WIN_RECORD_DONE)
 
     def send_status(self, client_socket: socket.socket):
-        games_played = self.user_db[self.client_socket_user_dict[client_socket][USERNAME]]["games_played"]
-        games_won = self.user_db[self.client_socket_user_dict[client_socket][USERNAME]]["games_won"]
+        games_played = self.user_db[self.client_socket_user_dict[client_socket]]["games_played"]
+        games_won = self.user_db[self.client_socket_user_dict[client_socket]]["games_won"]
         self.send_message_format_args(client_socket, Protocols.Response.STATUS_RESULT, games_played, games_won)
 
     def handle_client(self, client_socket: socket.socket, addr: tuple):
-        self.client_socket_user_dict[client_socket] = {USERNAME: None, IS_WAITING: False, IS_PLAYING: False}
+        self.client_socket_user_dict[client_socket] = None
         self.active_connections += 1
         print(f"[NEW CONNECTION] {addr} connected.")
         self.send_message_format(client_socket, Protocols.Response.WELCOME)
@@ -137,27 +129,16 @@ class Server(Interactable):
         self.lobby_tcp_sock.listen(5)
         self.lobby_tcp_sock.settimeout(1)  # 每 1 秒 timeout 一次
         print(f"[LISTENING] Server is listening on {host}:{port}")
-        while not self.shutdown_event.is_set():
-            try:
-                client_socket, addr = self.lobby_tcp_sock.accept()
-                client_handler = threading.Thread(target=self.handle_client, args=(client_socket, addr))
-                client_handler.start()
-                print(f"[ACTIVE CONNECTIONS] {self.active_connections}")
-            except socket.timeout:
-                continue
-        # for debug
-        print("server stopping...")
-        self.lobby_tcp_sock.close()
-
-    def start_server_and_listen_input(self, host = "0.0.0.0", port = 8888):
-        server_thread = threading.Thread(target=self.start_server, args=(host, port,))
-        server_thread.start()
-        time.sleep(0.2)
-        while True:
-            cmd = input("Enter 'stop' to stop the server: ")
-            if cmd == 'stop':
-                self.shutdown_event.set()
-                break
-            else:
-                print("invalid command.")
-        server_thread.join()
+        try:
+            while True:
+                try:
+                    client_socket, addr = self.lobby_tcp_sock.accept()
+                    client_handler = threading.Thread(target=self.handle_client, args=(client_socket, addr))
+                    client_handler.start()
+                    print(f"[ACTIVE CONNECTIONS] {self.active_connections}")
+                except socket.timeout:
+                    continue
+        except KeyboardInterrupt:
+            print("\n[SHUTTING DOWN] Server is shutting down.")
+        finally:
+            self.lobby_tcp_sock.close()

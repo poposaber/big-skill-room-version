@@ -4,7 +4,7 @@ class Interactable:
     def send_message_format(self, sock: socket.socket, msg_format: MessageFormat, arg_list: list = []) -> None:
         try:
             msg = msg_format.build(arg_list)
-            print(f"built msg: \"{msg}\"")
+            #print(f"built msg: \"{msg}\"")
             sock.send(msg.encode())
         except Exception as e:
             print(f"Error sending message format: {e}")
@@ -39,7 +39,7 @@ class Interactable:
     def receive_message_format(self, sock: socket.socket) -> str:
         try:
             msg = sock.recv(1024).decode()
-            print(f"received message: \"{msg}\"")
+            #print(f"received message: \"{msg}\"")
             return msg
         except Exception as e:
             print(f"Error receiving message format: {e}")

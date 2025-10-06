@@ -1,0 +1,62 @@
+{
+  "aabb": {
+    "password": "aabbcc",
+    "games_played": 3,
+    "games_won": 0
+  },
+  "tank": {
+    "password": "ttttt",
+    "games_played": 0,
+    "games_won": 0
+  },
+  "aa": {
+    "password": "cc",
+    "games_played": 30,
+    "games_won": 13
+  },
+  "barry": {
+    "password": "babab",
+    "games_played": 23,
+    "games_won": 11
+  },
+  "bob": {
+    "password": "aoa",
+    "games_played": 0,
+    "games_won": 0
+  },
+  "tom123": {
+    "password": "321mot",
+    "games_played": 3,
+    "games_won": 1
+  },
+  "attf": {
+    "password": "pswd",
+    "games_played": 0,
+    "games_won": 0
+  },
+  "admin": {
+    "password": "admin",
+    "games_played": 0,
+    "games_won": 0
+  },
+  "space included": {
+    "password": "also space",
+    "games_played": 0,
+    "games_won": 0
+  },
+  "acc": {
+    "password": "limit point",
+    "games_played": 4,
+    "games_won": 1
+  },
+  "this": {
+    "password": "is password",
+    "games_played": 1,
+    "games_won": 1
+  },
+  "hank": {
+    "password": "hhhh",
+    "games_played": 2,
+    "games_won": 0
+  }
+}

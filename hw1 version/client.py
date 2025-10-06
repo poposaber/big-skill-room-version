@@ -6,7 +6,6 @@ from protocols import Protocols
 from game import Game
 from interactable import Interactable
 import os
-import queue
 
 LOCK = threading.Lock()
 MAX_CNP_COUNT = 100
@@ -31,9 +30,6 @@ class Client(Interactable):
         self.about_to_enter_game = False
 
         self.is_player_a = True  # True if player A, False if player B
-        self.send_queue = queue.Queue()
-        self.response_queue = queue.Queue()
-        self.event_queue = queue.Queue()
 
     def connect_to_lobby_server(self, host="127.0.0.1", port = 8888): 
         self.lobby_tcp_sock.connect((host, port))
@@ -190,75 +186,67 @@ class Client(Interactable):
 
 
     def wait_for_invitations_and_connect_game(self):
-        try:
-            self.send_message_format_to_lobby_server(Protocols.Command.WAIT)
-            if not self.receive_check_is_format_name_from_lobby_server(Protocols.Response.WAIT_DONE):
-                print("did not receive WAIT_DONE.")
-            
-        except Exception as e:
-            print(f"Error in wait for invitation: {e}")
+        port = 10001
+        while True:
+            try:
+                self.wait_udp_sock.bind(("", port))
+                break
+            except OSError:
+                port += 1
+                if port > 65535:
+                    print("No available UDP ports to bind.")
+                    return
+        print(f"Listening for invitations on UDP port {port}. You can type 'unwait' to stop waiting.")
+        self.clear_messages(self.wait_udp_sock)
+        self.waiting_invitations = True
+        while not self.stop_waiting_invitation_event.is_set():
+            try:
+                self.wait_udp_sock.settimeout(0.5)
+                msg, fname, addr = self.receive_and_get_format_name_from(self.wait_udp_sock)
 
-        # port = 10001
-        # while True:
-        #     try:
-        #         self.wait_udp_sock.bind(("", port))
-        #         break
-        #     except OSError:
-        #         port += 1
-        #         if port > 65535:
-        #             print("No available UDP ports to bind.")
-        #             return
-        # print(f"Listening for invitations on UDP port {port}. You can type 'unwait' to stop waiting.")
-        # self.clear_messages(self.wait_udp_sock)
-        # self.waiting_invitations = True
-        # while not self.stop_waiting_invitation_event.is_set():
-        #     try:
-        #         self.wait_udp_sock.settimeout(0.5)
-        #         msg, fname, addr = self.receive_and_get_format_name_from(self.wait_udp_sock)
+                match fname:
+                    case Protocols.P2P.SCAN.name:
+                        self.send_message_format_args_to(self.wait_udp_sock, Protocols.P2P.PLAYER_HERE, addr, self.user_name)
+                    case Protocols.P2P.INVITE.name:
+                        inviter, = self.parse_message(msg, Protocols.P2P.INVITE)
+                        self.received_invitations[inviter] = addr
+                        print(f"\nReceived invitation from {inviter} at {addr}. Type \'accept\' or \'decline\' to accept or decline invitations .")
+                    case Protocols.P2P.CONNECT.name:
+                        ip, tcp_port = self.parse_message(msg, Protocols.P2P.CONNECT)
+                        print()
+                        with LOCK:
+                            self.game_client_tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                            self.game_client_tcp_sock.connect((ip, tcp_port))
+                        self.is_player_a = False
 
-        #         match fname:
-        #             case Protocols.P2P.SCAN.name:
-        #                 self.send_message_format_args_to(self.wait_udp_sock, Protocols.P2P.PLAYER_HERE, addr, self.user_name)
-        #             case Protocols.P2P.INVITE.name:
-        #                 inviter, = self.parse_message(msg, Protocols.P2P.INVITE)
-        #                 self.received_invitations[inviter] = addr
-        #                 print(f"\nReceived invitation from {inviter} at {addr}. Type \'accept\' or \'decline\' to accept or decline invitations .")
-        #             case Protocols.P2P.CONNECT.name:
-        #                 ip, tcp_port = self.parse_message(msg, Protocols.P2P.CONNECT)
-        #                 print()
-        #                 with LOCK:
-        #                     self.game_client_tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        #                     self.game_client_tcp_sock.connect((ip, tcp_port))
-        #                 self.is_player_a = False
-
-        #                 print(f"\nReceived game connection details: IP {ip}, TCP Port {tcp_port}. You can enter 'entergame' to start the game session.\n")
+                        print(f"\nReceived game connection details: IP {ip}, TCP Port {tcp_port}. You can enter 'entergame' to start the game session.\n")
                         
-        #                 self.send_message_format(self.lobby_tcp_sock, Protocols.Command.RECORD_PLAY)
-        #                 if not self.receive_and_check_is_message_format_name(self.lobby_tcp_sock, Protocols.Response.PLAY_RECORD_DONE):
-        #                     print("Did not receive PLAY_RECORD_DONE")
-        #                 time.sleep(0.1)
-        #                 self.about_to_enter_game = True
-        #                 break
-        #             case Protocols.P2P.ALREADY_IN_GAME.name:
-        #                 decliner, = self.parse_message(msg, Protocols.P2P.ALREADY_IN_GAME)
-        #                 print(f"{decliner} is already in game. Please invite later.")
-        #             case _:
-        #                 print(f"Unknown UDP message received: {msg} from {addr}")
-        #     except socket.timeout:
-        #         continue
-        #     except Exception as e:
-        #         print(f"Error receiving invitation: {e}")
-        #         break
-        # self.waiting_invitations = False
-        # with LOCK:
-        #     self.received_invitations.clear()
-        # # if self.about_to_enter_game:
-        # #     self.stop_waiting_invitations()
-        # #for debug
-        # #print("wait_udp_sock stopped waiting.")
-        # self.wait_udp_sock.close()
-        # self.wait_udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        # #self.stop_waiting_invitation_event.clear()
+                        self.send_message_format(self.lobby_tcp_sock, Protocols.Command.RECORD_PLAY)
+                        if not self.receive_and_check_is_message_format_name(self.lobby_tcp_sock, Protocols.Response.PLAY_RECORD_DONE):
+                            print("Did not receive PLAY_RECORD_DONE")
+                        time.sleep(0.1)
+                        self.about_to_enter_game = True
+                        break
+                    case Protocols.P2P.ALREADY_IN_GAME.name:
+                        decliner, = self.parse_message(msg, Protocols.P2P.ALREADY_IN_GAME)
+                        print(f"{decliner} is already in game. Please invite later.")
+                    case _:
+                        print(f"Unknown UDP message received: {msg} from {addr}")
+            except socket.timeout:
+                continue
+            except Exception as e:
+                print(f"Error receiving invitation: {e}")
+                break
+        self.waiting_invitations = False
+        with LOCK:
+            self.received_invitations.clear()
+        # if self.about_to_enter_game:
+        #     self.stop_waiting_invitations()
+        #for debug
+        #print("wait_udp_sock stopped waiting.")
+        self.wait_udp_sock.close()
+        self.wait_udp_sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        #self.stop_waiting_invitation_event.clear()
 
     def scan(self, target_ip = "127.0.0.1", start_port=10001, end_port=65535):
         # scan_msg = "SCAN"
@@ -588,15 +576,3 @@ class Client(Interactable):
         # for debug        
         #os.system("pause")
         self.close()
-
-    def send_message_format_to_lobby_server(self, msg_format, *args):
-        self.send_message_format_args(self.lobby_tcp_sock, msg_format, *args)
-
-    def receive_check_is_format_name_from_lobby_server(self, msg_format) -> bool:
-        return self.receive_and_check_is_message_format_name(self.lobby_tcp_sock, msg_format)
-    
-    def connect_and_start_client_process(self, host="127.0.0.1", port = 8888):
-        self.connect_to_lobby_server(host, port)
-        self.interact_to_lobby_server()
-        
-
