@@ -2,14 +2,16 @@ from message_format import MessageFormat
 
 class Protocols:
     class UserToLobby:
-        pass
+        ROLE = MessageFormat("ROLE", [str]) #ROLE|user or gameserver
+        EXIT = MessageFormat("EXIT")
     class LobbyToUser:
-        pass
+        WELCOME_USER = MessageFormat("WELCOME_USER")
+        GOODBYE = MessageFormat("GOODBYE")
     class UserToGame:
         pass
     class GameToUser:
         pass
     class LobbyToGame:
-        pass
+        WELCOME_GAMESERVER = MessageFormat("WELCOME_GAMESERVER")
     class GameToLobby:
         pass
