@@ -1,1 +1,4 @@
-print((1, 3))
+def test(*args):
+    return list(args)
+
+print(test(1))

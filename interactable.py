@@ -1,4 +1,5 @@
 import socket
+import queue
 from message_format import MessageFormat
 class Interactable:
     def send_message_format(self, sock: socket.socket, msg_format: MessageFormat, arg_list: list = []) -> None:
