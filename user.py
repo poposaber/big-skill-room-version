@@ -17,8 +17,9 @@ class User(Interactable):
         self.lobby_tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.game_tcp_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-        self.response_queue = queue.Queue()
-        self.event_queue = queue.Queue()
+        self.response_queue: queue.Queue[str] = queue.Queue()
+        self.event_queue: queue.Queue[tuple[int, str]] = queue.Queue()
+        self.terminate_event = threading.Event()
 
     def connect_to_lobby_server(self, host="127.0.0.1", port = 8888): 
         self.lobby_tcp_sock.connect((host, port))
@@ -37,10 +38,12 @@ class User(Interactable):
             print("login: log in an account")
             print("exit: exit the lobby server and close.")
             print()
+            print()
             print("You are not logged in yet. Enter command: >>>>>>>>>> ", end="")
         else:
             print("logout: log out your account")
             print("exit: exit the lobby server and close.")
+            print()
             print()
             print(f"{self.info.name}, enter command: >>>>>>>>>> ", end="")
 
@@ -48,45 +51,40 @@ class User(Interactable):
         pass
 
     def login(self):
-        pass
+        temp_user_name = input("Enter your user name: ")
+        temp_password = getpass.getpass("Enter your password: ")
+        try:
+            self.send_to_lobby(Protocols.UserToLobby.LOGIN, temp_user_name, temp_password)
+            response, = self.receive_response_and_parse(Protocols.LobbyToUser.LOGIN_RESULT)
+            if response == 0: #login success
+                self.info.name = temp_user_name
+                print("Login successful. You can now do further actions to play games.")
+            elif response == -1:
+                print("Login failed. Invalid username or password.")
+            elif response == -2:
+                print("Login failed. Another client is using this account.")
+            else:
+                print("Received unknown server response")
+        except Exception as e:
+            print(f"exception in login: {e}")
+            raise e
 
     def exit_lobby_server(self):
-        self.send_message_format(self.lobby_tcp_sock, Protocols.UserToLobby.EXIT)
-        if self.receive_and_check_is_message_format_name(self.lobby_tcp_sock, Protocols.LobbyToUser.GOODBYE):
+        self.send_to_lobby(Protocols.UserToLobby.EXIT)
+        _, name = self.receive_response_with_name()
+        if name == Protocols.LobbyToUser.GOODBYE.name:
             print("Exiting the client.")
 
     def logout(self):
-        pass
-
-    def get_from_event_queue(self) -> tuple[int, str]:
-        try:
-            event_num, username = self.event_queue.get()
-            return event_num, username
-        except Exception as e:
-            print(f"Exception at get_from_event_queue: {e}")
-            raise e
-        
-    def put_to_event_queue(self, event_num: int, username: str):
-        try:
-            self.event_queue.put((event_num, username))
-        except Exception as e:
-            print(f"Exception at put_to_event_queue: {e}")
-            raise e
-        
-    def get_from_response_queue(self) -> str:
-        try:
-            msg = self.response_queue.get()
-            return msg
-        except Exception as e:
-            print(f"Exception at get_from_response_queue: {e}")
-            raise e
-        
-    def put_to_response_queue(self, msg: str):
-        try:
-            self.response_queue.put(msg)
-        except Exception as e:
-            print(f"Exception at put_to_response_queue: {e}")
-            raise e
+        self.send_to_lobby(Protocols.UserToLobby.LOGOUT)
+        response, = self.receive_response_and_parse(Protocols.LobbyToUser.LOGOUT_RESULT)
+        if response == 0:
+            print("Logout successful.")
+            self.info.reset()
+        elif response == -1:
+            print("Logout failed. You are not logged in yet.")
+        else:
+            print("Received unknown server response")
 
     def send_to_lobby(self, msg_fmt: MessageFormat, *args):
         try:
@@ -94,64 +92,98 @@ class User(Interactable):
             self.send_message_format_args(self.lobby_tcp_sock, msg_fmt, *args)
         except Exception as e:
             print(f"exception in send_to_lobby: {e}")
-            raise e
 
     def receive_from_lobby_and_separate(self):
-        try:
-            msg, name = self.receive_and_get_format_name(self.lobby_tcp_sock)
-            if name == Protocols.LobbyToUser.EVENT.name:
-                event_num, username = self.parse_message(msg, Protocols.LobbyToUser.EVENT)
-                self.put_to_event_queue(event_num, username)
-            else:
-                self.put_to_response_queue(msg)
-        except Exception as e:
-            print(f"exception in receive_from_lobby_and_separate: {e}")
-            raise e
+        while not self.terminate_event.is_set():
+            try:
+                msg, name = self.receive_and_get_format_name(self.lobby_tcp_sock)
+                if name == Protocols.LobbyToUser.EVENT.name:
+                    event_num, username = self.parse_message(msg, Protocols.LobbyToUser.EVENT)
+                    self.event_queue.put((event_num, username))
+                else:
+                    self.response_queue.put(msg)
+            except ConnectionResetError as e:
+                print(f"Connection to lobby server lost: {e}")
+                break
+            except Exception as e:
+                print(f"exception in receive_from_lobby_and_separate: {e}")
         
     def receive_response_with_name(self) -> tuple[str, str]:
-        msg = self.get_from_response_queue()
+        """message, name"""
+        msg = self.response_queue.get()
         name = self.check_message_format_name(msg)
+        print(f"msg: {msg}, name: {name}")
         return msg, name
     
     def receive_response_and_parse(self, msg_fmt: MessageFormat) -> list:
         msg, _ = self.receive_response_with_name()
         return self.parse_message(msg, msg_fmt)
     
-    def receive_event(self) -> tuple[int, str]:
-        event_num, username = self.get_from_event_queue()
-        return event_num, username
-                
-
+    def receive_event(self):
+        while not self.terminate_event.is_set():
+            try:
+                event_num, username = self.event_queue.get(timeout=0.5)
+                match event_num:
+                    case 0:
+                        print(f"Invitation from {username}")
+                    case 1:
+                        print(f"{username} accepted your invitation.")
+                    case _:
+                        print(f"Unknown event {event_num} from {username}")
+            except queue.Empty:
+                continue
 
     def get_input(self):
-        while True:
-            self.print_prompt()
-            cmd = input().strip().lower()
-            if not cmd:
-                print("Please enter a valid command.")
-                continue
-            match cmd:
-                case "register":
-                    if self.info.name:
-                        print("Logged in users cannot register.")
-                        continue
-                    self.register()
-                case "login":
-                    if self.info.name:
-                        print("You are already logged in.")
-                        continue
-                    self.login()
-                case "exit":
-                    self.exit_lobby_server()
-                    break
-                case "logout":
-                    if not self.info.name:
-                        print("You are not loggin in yet.")
-                    self.logout()
+        while not self.terminate_event.is_set():
+            try:
+                self.print_prompt()
+                cmd = input().strip().lower()
+                if not cmd:
+                    print("Please enter a valid command.")
+                    continue
+                match cmd:
+                    case "register":
+                        if self.info.name:
+                            print("Logged in users cannot register.")
+                            continue
+                        self.register()
+                    case "login":
+                        if self.info.name:
+                            print("You are already logged in.")
+                            continue
+                        self.login()
+                    case "exit":
+                        self.exit_lobby_server()
+                        self.close()
+                    case "logout":
+                        if not self.info.name:
+                            print("You are not loggin in yet.")
+                            continue
+                        self.logout()
+                    case _:
+                        print("Unknown command. Please try again.")
+            except Exception as e:
+                print(f"exception in get_input: {e}")
+    
+    def close(self):
+        self.terminate_event.set()
+        time.sleep(0.3)  # wait for threads to terminate
+        self.lobby_tcp_sock.close()
+        self.game_tcp_sock.close()
+
+
     def start(self, host = "127.0.0.1", port = 8888):
         self.connect_to_lobby_server(host, port)
-        lobby_msg_recver = threading.Thread(target=self.receive_from_lobby_and_separate)
-        lobby_msg_recver.start()
+        lobby_msg_separater = threading.Thread(target=self.receive_from_lobby_and_separate)
+        lobby_msg_separater.start()
         event_receiver = threading.Thread(target=self.receive_event)
+        event_receiver.start()
+
         self.get_input()
+        print("Client stopping...")
+        lobby_msg_separater.join()
+        event_receiver.join()
+        print("Client stopped.")
+        #os.system("pause")
+
 
