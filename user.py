@@ -48,7 +48,48 @@ class User(Interactable):
             print(f"{self.info.name}, enter command: >>>>>>>>>> ", end="")
 
     def register(self):
-        pass
+        name_registered = False
+        try:
+            while not name_registered:
+                temp_user_name = input("Enter your user name (or press Ctrl+C to cancel): ")
+                self.send_to_lobby(Protocols.UserToLobby.REG_NAME, temp_user_name)
+                response, = self.receive_response_and_parse(Protocols.LobbyToUser.REG_NAME_RESULT)
+                if response == 0: #register success
+                    name_registered = True
+                    print("Username accepted. Now please set your password.")
+                elif response == -1:
+                    print("Registration failed. Username taken.")
+                else:
+                    print("Received unknown server response")
+
+            while True:
+                temp_password = getpass.getpass("Enter your password (or press Ctrl+C to cancel): ")
+                confirm_password = getpass.getpass("Confirm your password (or press Ctrl+C to cancel): ")
+                if temp_password != confirm_password:
+                    print("Passwords do not match.")
+                    continue
+                self.send_to_lobby(Protocols.UserToLobby.REG_PASSWORD, temp_password)
+                response, = self.receive_response_and_parse(Protocols.LobbyToUser.REG_PASSWORD_RESULT)
+                if response == 0: #register success
+                    print("Registration successful. You can now log in with this account.")
+                elif response == -1:
+                    print("Registration failed. Weak password.")
+                else:
+                    print("Received unknown server response")
+        except KeyboardInterrupt:
+            if name_registered:
+                print("\nCancelling registration. Deleting the partially registered account.")
+                self.send_to_lobby(Protocols.UserToLobby.REG_CANCEL)
+                _, name = self.receive_response_with_name()
+                if name == Protocols.LobbyToUser.REG_CANCELED.name:
+                    print("Registration cancelled.")
+                else:
+                    print("Received unknown server response")
+            else:
+                print("\nCancelling registration.")
+        except Exception as e:
+            print(f"exception in register: {e}")
+            raise e
 
     def login(self):
         temp_user_name = input("Enter your user name: ")

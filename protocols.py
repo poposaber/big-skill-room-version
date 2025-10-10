@@ -14,6 +14,15 @@ class Protocols:
         LOGOUT = MessageFormat("LOGOUT")
         """LOGOUT"""
 
+        REG_NAME = MessageFormat("REG_NAME", [str])
+        """REG_NAME|(username)"""
+
+        REG_PASSWORD = MessageFormat("REG_PASSWORD", [str])
+        """REG_PASSWORD|(password)"""
+
+        REG_CANCEL = MessageFormat("REG_CANCEL")
+        """REG_CANCEL"""
+
 
     class LobbyToUser:
         WELCOME_USER = MessageFormat("WELCOME_USER")
@@ -32,7 +41,16 @@ class Protocols:
         """LOGIN_RESULT|0 success; -1 fail (wrong username or password); -2 fail (already logged in)"""
 
         LOGOUT_RESULT = MessageFormat("LOGOUT_RESULT", [int])
-        """LOGOUT_RESULT|0 success; -1 fail (not logged in)"""
+        """LOGOUT_RESULT|0 success; -1 fail (not logged in, seldom used)"""
+
+        REG_NAME_RESULT = MessageFormat("REG_NAME_RESULT", [int])
+        """REG_NAME_RESULT|0 success; -1 fail (username taken)"""
+
+        REG_PASSWORD_RESULT = MessageFormat("REG_PASSWORD_RESULT", [int])
+        """REG_PASSWORD_RESULT|0 success; -1 fail (weak password, seldom used)"""
+
+        REG_CANCELED = MessageFormat("REG_CANCELED")
+        """REG_CANCELED"""
 
         UNKNOWN_COMMAND = MessageFormat("UNKNOWN_COMMAND")
         """UNKNOWN_COMMAND"""
