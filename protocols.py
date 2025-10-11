@@ -34,9 +34,6 @@ class Protocols:
         WELCOME_USER = MessageFormat("WELCOME_USER")
         """WELCOME_USER"""
 
-        WELCOME_GAMESERVER = MessageFormat("WELCOME_GAMESERVER")
-        """WELCOME_GAMESERVER"""
-
         GOODBYE = MessageFormat("GOODBYE")
         """GOODBYE"""
 
@@ -74,5 +71,8 @@ class Protocols:
         pass
     class LobbyToGame:
         WELCOME_GAMESERVER = MessageFormat("WELCOME_GAMESERVER")
+        """WELCOME_GAMESERVER"""
+
+        
     class GameToLobby:
         pass
