@@ -23,6 +23,12 @@ class Protocols:
         REG_CANCEL = MessageFormat("REG_CANCEL")
         """REG_CANCEL"""
 
+        WAIT = MessageFormat("WAIT")
+        """WAIT"""
+
+        UNWAIT = MessageFormat("UNWAIT")
+        """UNWAIT"""
+
 
     class LobbyToUser:
         WELCOME_USER = MessageFormat("WELCOME_USER")
@@ -51,6 +57,12 @@ class Protocols:
 
         REG_CANCELED = MessageFormat("REG_CANCELED")
         """REG_CANCELED"""
+
+        WAIT_RESULT = MessageFormat("WAIT_RESULT", [int])
+        """WAIT_RESULT|0 success; -1 fail (already waiting)"""
+
+        UNWAIT_RESULT = MessageFormat("UNWAIT_RESULT", [int])
+        """UNWAIT_RESULT|0 success; -1 fail (not waiting)"""
 
         UNKNOWN_COMMAND = MessageFormat("UNKNOWN_COMMAND")
         """UNKNOWN_COMMAND"""

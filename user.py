@@ -41,6 +41,10 @@ class User(Interactable):
             print()
             print("You are not logged in yet. Enter command: >>>>>>>>>> ", end="")
         else:
+            if not self.info.is_waiting:
+                print("wait: wait in the lobby for a game invitation")
+            else:
+                print("unwait: stop waiting in the lobby")
             print("logout: log out your account")
             print("exit: exit the lobby server and close.")
             print()
@@ -72,6 +76,7 @@ class User(Interactable):
                 response, = self.receive_response_and_parse(Protocols.LobbyToUser.REG_PASSWORD_RESULT)
                 if response == 0: #register success
                     print("Registration successful. You can now log in with this account.")
+                    break
                 elif response == -1:
                     print("Registration failed. Weak password.")
                 else:
@@ -109,6 +114,28 @@ class User(Interactable):
         except Exception as e:
             print(f"exception in login: {e}")
             raise e
+        
+    def wait_in_lobby(self):
+        self.send_to_lobby(Protocols.UserToLobby.WAIT)
+        response, = self.receive_response_and_parse(Protocols.LobbyToUser.WAIT_RESULT)
+        if response == 0: #wait success
+            self.info.is_waiting = True
+            print("You are now waiting in the lobby for a game invitation.")
+        elif response == -1:
+            print("Wait failed. You are already waiting.")
+        else:
+            print("Received unknown server response")
+
+    def unwait_in_lobby(self):
+        self.send_to_lobby(Protocols.UserToLobby.UNWAIT)
+        response, = self.receive_response_and_parse(Protocols.LobbyToUser.UNWAIT_RESULT)
+        if response == 0: #unwait success
+            self.info.is_waiting = False
+            print("You have stopped waiting in the lobby.")
+        elif response == -1:
+            print("Unwait failed. You are not waiting.")
+        else:
+            print("Received unknown server response")
 
     def exit_lobby_server(self):
         self.send_to_lobby(Protocols.UserToLobby.EXIT)
@@ -133,6 +160,7 @@ class User(Interactable):
             self.send_message_format_args(self.lobby_tcp_sock, msg_fmt, *args)
         except Exception as e:
             print(f"exception in send_to_lobby: {e}")
+            raise e
 
     def receive_from_lobby_and_separate(self):
         while not self.terminate_event.is_set():
@@ -193,6 +221,22 @@ class User(Interactable):
                             print("You are already logged in.")
                             continue
                         self.login()
+                    case "wait":
+                        if not self.info.name:
+                            print("You are not loggin in yet.")
+                            continue
+                        if self.info.is_waiting:
+                            print("You are already waiting in the lobby.")
+                            continue
+                        self.wait_in_lobby()
+                    case "unwait":
+                        if not self.info.name:
+                            print("You are not loggin in yet.")
+                            continue
+                        if not self.info.is_waiting:
+                            print("You are not waiting in the lobby.")
+                            continue
+                        self.unwait_in_lobby()
                     case "exit":
                         self.exit_lobby_server()
                         self.close()

@@ -43,8 +43,46 @@ class LobbyServer(Interactable):
         if self.socket_user_dict[client_socket].name is None:
             self.send_message_format_args(client_socket, Protocols.LobbyToUser.LOGOUT_RESULT, -1)
         else:
-            self.socket_user_dict[client_socket].name = None
+            self.socket_user_dict[client_socket].reset()
             self.send_message_format_args(client_socket, Protocols.LobbyToUser.LOGOUT_RESULT, 0)
+
+    def help_register(self, client_socket: socket.socket, msg: str):
+        username, = self.parse_message(msg, Protocols.UserToLobby.REG_NAME)
+        with LOCK:
+            if username in self.user_db:
+                self.send_message_format_args(client_socket, Protocols.LobbyToUser.REG_NAME_RESULT, -1)
+                return
+                #client_socket.send(Protocols.Response.USERNAME_EXISTS.encode())
+            self.send_message_format_args(client_socket, Protocols.LobbyToUser.REG_NAME_RESULT, 0)
+
+            rcvmsg, command = self.receive_and_get_format_name(client_socket)
+            if command == Protocols.UserToLobby.REG_CANCEL.name:
+                print("registration cancelled.")
+                self.send_message_format(client_socket, Protocols.LobbyToUser.REG_CANCELED)
+                return
+            elif command == Protocols.UserToLobby.REG_PASSWORD.name:
+                password, = self.parse_message(rcvmsg, Protocols.UserToLobby.REG_PASSWORD)
+                self.user_db[username] = {"password": password, "games_played": 0, "games_won": 0}
+                self.save_user_db()
+                self.send_message_format_args(client_socket, Protocols.LobbyToUser.REG_PASSWORD_RESULT, 0)
+
+    def make_waiting(self, client_socket: socket.socket):
+        if self.socket_user_dict[client_socket].name is None:
+            self.send_message_format_args(client_socket, Protocols.LobbyToUser.WAIT_RESULT, -1)
+        elif self.socket_user_dict[client_socket].is_waiting:
+            self.send_message_format_args(client_socket, Protocols.LobbyToUser.WAIT_RESULT, -1)
+        else:
+            self.socket_user_dict[client_socket].is_waiting = True
+            self.send_message_format_args(client_socket, Protocols.LobbyToUser.WAIT_RESULT, 0)
+
+    def make_unwaiting(self, client_socket: socket.socket):
+        if self.socket_user_dict[client_socket].name is None:
+            self.send_message_format_args(client_socket, Protocols.LobbyToUser.UNWAIT_RESULT, -1)
+        elif not self.socket_user_dict[client_socket].is_waiting:
+            self.send_message_format_args(client_socket, Protocols.LobbyToUser.UNWAIT_RESULT, -1)
+        else:
+            self.socket_user_dict[client_socket].is_waiting = False
+            self.send_message_format_args(client_socket, Protocols.LobbyToUser.UNWAIT_RESULT, 0)
 
     def handle_client(self, client_socket: socket.socket, addr: tuple[str, int]):
         try:
@@ -73,29 +111,27 @@ class LobbyServer(Interactable):
                 print(f"command: \"{command}\"")
 
                 match command:
-                    # case Protocols.UserToLobby.REG_USERNAME.name:
-                    #     self.help_register(user_socket, msg)
-
                     case Protocols.UserToLobby.LOGIN.name:
                         self.help_login(user_socket, msg)
 
                     case Protocols.UserToLobby.LOGOUT.name:
                         self.help_logout(user_socket)
 
+                    case Protocols.UserToLobby.REG_NAME.name:
+                        self.help_register(user_socket, msg)
+
                     case Protocols.UserToLobby.EXIT.name:
                         self.send_message_format(user_socket, Protocols.LobbyToUser.GOODBYE)
-                        #user_socket.send(Protocols.LobbyToUser.GOODBYE.encode())
                         break
-                    # case Protocols.UserToLobby.RECORD_WIN.name:
-                    #     self.record_win(user_socket)
-                    #     #user_socket.send(Protocols.LobbyToUser.WIN_RECORD_DONE.encode())
-                    # case Protocols.UserToLobby.RECORD_PLAY.name:
-                    #     self.record_play(user_socket)
-                    # case Protocols.UserToLobby.STATUS.name:
-                    #     self.send_status(user_socket)
+
+                    case Protocols.UserToLobby.WAIT.name:
+                        self.make_waiting(user_socket)
+
+                    case Protocols.UserToLobby.UNWAIT.name:
+                        self.make_unwaiting(user_socket)
+
                     case _:
                         self.send_message_format(user_socket, Protocols.LobbyToUser.UNKNOWN_COMMAND)
-                        #user_socket.send(Protocols.LobbyToUser.UNKNOWN_COMMAND.encode())
             except Exception as e:
                 print(f"[EXCEPTION] {e}")
                 break

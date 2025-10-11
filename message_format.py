@@ -1,5 +1,5 @@
 class MessageFormat:
-    SEP = '|'
+    SEP = '\x1e'  # ASCII Record Separator
     def __init__(self, name: str, format_list: list = []):
         self.name = name
         self.format_list = format_list
@@ -34,4 +34,6 @@ class MessageFormat:
                 parsed.append(format_type(part))
             except Exception:
                 raise ValueError(f"failed to parse {part} as {format_type.__name__}.")
+        # for debugging
+        print(f"parsed: {parsed}")
         return parsed
